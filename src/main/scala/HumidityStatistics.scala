@@ -66,7 +66,8 @@ object HumidityStatistics {
       .sortWith(_._2.avg > _._2.avg)
 
   /**
-   * TODO: I tried to execute the operation using concurrency but it doesn't works
+   * TODO: I tried to execute the operation using concurrency but it doesn't works.
+   *  I'm using calculateOperation instead.
    */
   def calculateStatisticsOperations(
     stream: ZStream[Any, Throwable, Measurement],
@@ -89,7 +90,7 @@ object HumidityStatistics {
 
   val program: ZIO[Any, Throwable, Chunk[Measurement]] =
     for {
-      _                   <- printLine("What is the directory of csv files?")
+      _                   <- printLine("Which is the directory of csv files?")
       path                <- readLine
       dir                 <- ZIO.attempt(Paths.get(path)).mapError(e => new IllegalArgumentException(s"$path is not a directory", e))
       _                   <- if (!Files.isDirectory(dir)) ZIO.fail(new IllegalArgumentException(s"$path is not a directory"))
@@ -107,7 +108,13 @@ object HumidityStatistics {
                 .via(ZPipeline.mapZIO(in => ZIO.fromEither(decode[MeasurementRow](convertToJson(in)))))
                 .via(
                   ZPipeline
-                    .map(in => Measurement(in.sensorId, if (in.humidity == "NaN") None else Some(in.humidity.toLong)))
+                    .map(in =>
+                      Measurement(
+                        in.sensorId,
+                        if (in.humidity == "NaN") None //NaN is represented by None in our implementation.
+                        else Some(in.humidity.toLong)
+                      )
+                    )
                 )
             )
           )
@@ -116,7 +123,6 @@ object HumidityStatistics {
       minMeasurements     <- calculateOperation(zMeasurements, "min", minSome).runCollect
       maxMeasurements     <- calculateOperation(zMeasurements, "max", maxSome).runCollect
       avgMeasurements     <- calculateOperation(zMeasurements, "avg", averageSome).runCollect
-      // statistics          <- calculateStatisticsOperations(zMeasurements, minSome, averageSome, maxSome).runCollect
       measurements        <- zMeasurements.runCollect
       _                   <- printLine(s"Num of processed files: $nFiles")
       _                   <- printLine(s"Num of processed measurements: $nMeasurements")
